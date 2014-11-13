@@ -1,5 +1,6 @@
 #include "CImg.h"
 #include "math.h"
+#include <limits>
 #include <vector>
 #include <algorithm>
 using namespace cimg_library;
@@ -75,12 +76,16 @@ pixel_info get_priority() {
 	fillfront.pop_back();
 	return p;
 
-float SSD(pixel_info p, pixel_info q) {
+float SSD(pixel_info p, int qx, int qy) {
 	int i, j;
 	float sum = 0;
 	for (i = max(p.x_loc - 4, 0); i <= min(p.x_loc + 4, source.width() - 1); i++) {
 		for (j = max(p.y_loc - 4, 0); j <= min(p.y_loc + 4, source.height() - 1); j++) {
-			// sum up values
+			if(!omega(i, j)) {
+				sum = sum + pow(source(i, j, 0, 0) - source(qx+i-p.x_loc, qy+j-p.y_loc, 0, 0), 2) +
+					pow(source(i, j, 0, 1) - source(qx+i-p.x_loc, qy+j-p.y_loc, 0, 1), 2) +
+					pow(source(i, j, 0, 2) - source(qx+i-p.x_loc, qy+j-p.y_loc, 0, 2), 2)
+			}
 		}
 	}
 	return sum;
@@ -122,13 +127,42 @@ Vector2d getNormal(pixel_info &p) {
 	return normal;
 }
 
-void fill() {
+void inpaint() {
 	while (!fillfront.empty()) {
+
 		//compute priorities
+
+		//get next patch to fill
 		pixel_info next = get_priority();
-		//find minimum SSD
+
+		//get minimum patch
+		pixel_info min_patch;
+		float min = std::numeric_limits<float>::max();
+		for (int i = 4; i < source.width() - 4; i++) {
+			for (int j = 4; j < source.height() - 4; j++) {
+				float temp = SSD(next, i, j);
+				if (temp < min) {
+					min_patch.x_loc = i;
+					min_patch.y_loc = j;
+					min = temp;
+				}
+			}
+		}
+
 		//fill
+		for (int i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
+			for (int j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
+				if (omega(i, j)) {
+					source(i, j, 0, 0) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 0);
+					source(i, j, 0, 1) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 1);
+					source(i, j, 0, 2) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 2);
+				}
+			}
+		}
+
+		//recalculate confidences
 		confidence(next);
+
 		//add to fillfront
 	}
 }
