@@ -25,9 +25,26 @@ struct pixel_info {
 
 std::vector< pixel_info > fillfront;
 
-struct Vector2d {
+class Vector2d {
+public:
 	float x;
 	float y;
+	Vector2d() {
+		x = 0;
+		y = 0;
+	};
+	Vector2d(float &x_coord, float &y_coord) {
+		x = x_coord;
+		y = y_coord;
+	};
+	void normalize() {
+		float length = std::sqrt(y * y + x * x);
+		x /= length;
+		y /= length;
+	};
+	float operator*(Vector2d &v1) {
+		return x * v1.x + y * v1.y;
+	};
 };
 
 void confidence(pixel_info &p) {
@@ -59,7 +76,7 @@ void init(int width, int height, int square_x, int square_y, int square_size) {
 }
 
 Vector2d getNormal(pixel_info &p) {
-	Vector2d normal = {0, 0};
+	Vector2d normal = Vector2d();
 	int i = p.x_loc;
 	int jtop = std::max(p.y_loc - 1, 0);
 	int jbot = std::min(p.y_loc + 1, omega.height() - 1);
@@ -89,9 +106,28 @@ Vector2d getNormal(pixel_info &p) {
 		xGrad += omega(iright, j + 1);
 	}
 	float length = std::sqrt(yGrad * yGrad + xGrad * xGrad);
-	normal.x = xGrad / length;
-	normal.y = yGrad / length;
+	normal.x = xGrad;
+	normal.y = yGrad;
+	normal.normalize();
 	return normal;
+}
+
+Vector2d getGradient(pixel_info &p) {
+	Vector2d gradient = Vector2d();
+	int i = p.x_loc;
+	int jtop = std::max(p.y_loc - 1, 0);
+	int jbot = std::min(p.y_loc + 1, omega.height() - 1);
+	float yGrad = 0;
+	int topWeight;
+	int botWeight;
+	if (i - 1 >= 0) {
+		if (!omega(i - 1, jtop)) {
+			yGrad += source(i - 1, jtop);
+		}
+		yGrad -= omega(i - 1, jbot);
+		yGrad += omega(i - 1, jtop);
+	}
+	return gradient;
 }
 
 
@@ -106,7 +142,7 @@ int main(int argc, char *argv[]) {
 		squarebottom = squaretop + squaresize;
 		init(source.width(), source.height(), squareleft, squaretop, squaresize);
 
-		testing normal
+		// testing normal
 		for (int i = squareleft; i < squareleft + squaresize; i++) {
 			for (int j = squaretop; j < squaretop + squaresize; j++) {
 				pixel_info p = {i, j, 0, 0, 0};
