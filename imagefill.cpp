@@ -122,6 +122,17 @@ Vector2d getNormal(pixel_info &p) {
 	return normal;
 }
 
+void fill() {
+	while (!fillfront.empty()) {
+		//compute priorities
+		pixel_info next = get_priority();
+		//find minimum SSD
+		//fill
+		confidence(next);
+		//add to fillfront
+	}
+}
+
 int main(int argc, char *argv[]) {
 	if (argc == 3) {
 		source = CImg<unsigned char>(argv[1]);
@@ -133,7 +144,7 @@ int main(int argc, char *argv[]) {
 		squarebottom = squaretop + squaresize;
 		init(source.width(), source.height(), squareleft, squaretop, squaresize);
 
-		testing normal
+		//testing normal
 		for (int i = squareleft; i < squareleft + squaresize; i++) {
 			for (int j = squaretop; j < squaretop + squaresize; j++) {
 				pixel_info p = {i, j, 0, 0, 0};
