@@ -26,3 +26,9 @@
 *.exe
 *.out
 *.app
+
+
+#images
+*.pgm
+*.jpg
+*.png
