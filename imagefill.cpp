@@ -156,6 +156,7 @@ void inpaint() {
 					source(i, j, 0, 0) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 0);
 					source(i, j, 0, 1) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 1);
 					source(i, j, 0, 2) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 2);
+					omega(i, j) = 0;
 				}
 			}
 		}
@@ -164,6 +165,24 @@ void inpaint() {
 		confidence(next);
 
 		//add to fillfront
+		for (int i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
+			for (int j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
+				if(i == std::max(p.x_loc - 4, 0) || i == std::min(p.x_loc + 4, source.width() - 1) || 
+					j == std::max(p.y_loc - 4, 0) || j == std::min(p.y_loc + 4, source.height() - 1)) {
+					// pixel_info d_sigma;
+					// d_sigma.x_loc = i;
+					// d_sigma.y_loc = j;
+					// d_sigma.conf = confidence_values(i, j);
+					// d_sigma.data = 0;
+					// d_sigma.priority = d_sigma.conf * d_sigma.data;
+					// if (!fillfront.contains(d_sigma)) {
+					// 	fillfront.push_back(d_sigma);
+					// } else {
+					// 	fillfront.pop();
+					// }
+				}
+			}
+		}
 	}
 }
 
