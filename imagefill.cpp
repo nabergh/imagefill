@@ -9,7 +9,7 @@ int squaresize;
 
 
 int main(int argc, char *argv[]) {
-	if (argc > 2) {
+	if (argc > 3) {
 		source = CImg<unsigned char>(argv[1]);
 		squaresize = atoi(argv[2]);
 		source.display();
