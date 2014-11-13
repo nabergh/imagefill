@@ -1,5 +1,6 @@
 #include "CImg.h"
 #include "math.h"
+#include "vector.h"
 using namespace cimg_library;
 
 
@@ -11,6 +12,15 @@ int squareright;
 int squaretop;
 int squarebottom;
 int squaresize;
+std::vector<pixel_info> fillfront;
+
+struct {
+	int x_loc;
+	int y_loc;
+	float conf;
+	float data;
+	float priority;
+} pixel_info;
 
 float confidence() {
 	return 0;
