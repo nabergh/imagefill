@@ -1,6 +1,7 @@
 #include "CImg.h"
 #include "math.h"
 #include <vector>
+#include <algorithm>
 using namespace cimg_library;
 
 
@@ -48,11 +49,37 @@ void init(int width, int height, int square_x, int square_y, int square_size) {
 		for (j = square_y; j < square_y+square_size; j++) {
 			confidence_values(i, j) = 0;
 			omega(i, j) = 1;
+			if(i == square_x || i == square_x+square_size - 1 || j == square_y || j == square_y + square_size - 1) {
+				pixel_info d_sigma;
+				d_sigma.x_loc = i;
+				d_sigma.y_loc = j;
+				d_sigma.conf = 1;
+				d_sigma.data = 0;
+				d_sigma.priority = d_sigma.conf * d_sigma.data;
+				fillfront.push_back(d_sigma);
+			}
 		}
 	}
 
 }
 
+pixel_info get_priority() {
+	std::make_heap(fillfront.begin(), fillfront.end());
+	pixel_info p = fillfront.front();
+	std::pop_heap(fillfront.begin(), fillfront.end());
+	fillfront.pop_back();
+	return p;
+
+float SSD(pixel_info p, pixel_info q) {
+	int i, j;
+	float sum = 0;
+	for (i = max(p.x_loc - 4, 0); i <= min(p.x_loc + 4, source.width() - 1); i++) {
+		for (j = max(p.y_loc - 4, 0); j <= min(p.y_loc + 4, source.height() - 1); j++) {
+			// sum up values
+		}
+	}
+	return sum;
+}
 
 int main(int argc, char *argv[]) {
 	if (argc == 3) {
@@ -72,4 +99,4 @@ int main(int argc, char *argv[]) {
 	}
 
 	return 0;
-}
+}	
