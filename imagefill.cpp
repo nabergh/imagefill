@@ -1,6 +1,8 @@
 #include "CImg.h"
 #include "math.h"
+#include <limits>
 #include <vector>
+#include <algorithm>
 using namespace cimg_library;
 
 
@@ -22,6 +24,10 @@ struct pixel_info {
 	float data;
 	float priority;
 };
+
+bool comparePriority(pixel_info &p1, pixel_info &p2) {
+	return p1.priority < p2.priority;
+}
 
 std::vector< pixel_info > fillfront;
 
@@ -64,15 +70,47 @@ void confidence(pixel_info &p) {
 
 void init(int width, int height, int square_x, int square_y, int square_size) {
 	confidence_values = CImg<float>(source.width(), source.height(), 1, 1, 1);
+	result = CImg<unsigned char>(source);
 	omega = CImg<bool>(source.width(), source.height(), 1, 1, 0);
 	int i, j;
 	for (i = square_x; i < square_x + square_size; i++) {
 		for (j = square_y; j < square_y + square_size; j++) {
 			confidence_values(i, j) = 0;
 			omega(i, j) = 1;
+			if (i == square_x || i == square_x + square_size - 1 || j == square_y || j == square_y + square_size - 1) {
+				pixel_info d_sigma;
+				d_sigma.x_loc = i;
+				d_sigma.y_loc = j;
+				d_sigma.conf = 1;
+				d_sigma.data = 0;
+				d_sigma.priority = d_sigma.conf * d_sigma.data;
+				fillfront.push_back(d_sigma);
+			}
 		}
 	}
 
+}
+
+pixel_info get_priority() {
+	std::make_heap(fillfront.begin(), fillfront.end(), comparePriority);
+	pixel_info p = fillfront.front();
+	std::pop_heap(fillfront.begin(), fillfront.end(), comparePriority);
+	fillfront.pop_back();
+	return p;
+}
+float SSD(pixel_info p, int qx, int qy) {
+	int i, j;
+	float sum = 0;
+	for (i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
+		for (j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
+			if (!omega(i, j)) {
+				sum = sum + pow(source(i, j, 0, 0) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, 0), 2) +
+				      pow(source(i, j, 0, 1) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, 1), 2) +
+				      pow(source(i, j, 0, 2) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, 2), 2);
+			}
+		}
+	}
+	return sum;
 }
 
 Vector2d getNormal(pixel_info &p) {
@@ -87,7 +125,7 @@ Vector2d getNormal(pixel_info &p) {
 	}
 	yGrad -= 2 * omega(i, jbot);
 	yGrad += 2 * omega(i, jtop);
-	if (i + 1 < omega.height()) {
+	if (i + 1 < omega.width()) {
 		yGrad -= omega(i + 1, jbot);
 		yGrad += omega(i + 1, jtop);
 	}
@@ -101,7 +139,7 @@ Vector2d getNormal(pixel_info &p) {
 	}
 	xGrad -= 2 * omega(ileft, j);
 	xGrad += 2 * omega(iright, j);
-	if (j + 1 < omega.width()) {
+	if (j + 1 < omega.height()) {
 		xGrad -= omega(ileft, j + 1);
 		xGrad += omega(iright, j + 1);
 	}
@@ -112,24 +150,254 @@ Vector2d getNormal(pixel_info &p) {
 	return normal;
 }
 
+
+void searchBorder(int width, int x_loc, int y_loc, pixel_info &nearest) {
+	int x, y, xmin, xmax, ymin, ymax;
+	x = x_loc;
+	y = fmax(y_loc + width / 2, 0.0);
+	xmax = fmin(x + width / 2, source.width() - 1);
+	ymax = fmin(y + width / 2, source.height() - 1);
+	xmin = fmax(x - width / 2, 0.0);
+	xmax = fmax(y - width / 2, 0.0);
+	for (; x <= xmax; x++) {
+		if (!omega(x, y)) {
+			nearest.x_loc = x;
+			nearest.y_loc = y;
+			return;
+		}
+	}
+	for (; y <= ymax; y++) {
+		if (!omega(x, y)) {
+			nearest.x_loc = x;
+			nearest.y_loc = y;
+			return;
+		}
+	}
+	for (; x >= xmin; x--) {
+		if (!omega(x, y)) {
+			nearest.x_loc = x;
+			nearest.y_loc = y;
+			return;
+		}
+	}
+	for (; y >= ymin; y--) {
+		if (!omega(x, y)) {
+			nearest.x_loc = x;
+			nearest.y_loc = y;
+			return;
+		}
+	}
+	for (; x < x_loc; x++) {
+		if (!omega(x, y)) {
+			nearest.x_loc = x;
+			nearest.y_loc = y;
+			return;
+		}
+	}
+}
+
+pixel_info findNearest(int x, int y) {
+	int width = 3;
+	pixel_info nearest = { -1, -1, 0, 0, 0};
+	while (nearest.x_loc == -1) {
+		searchBorder(width, x, y, nearest);
+		width += 2;
+	}
+	return nearest;
+}
+
 Vector2d getGradient(pixel_info &p) {
 	Vector2d gradient = Vector2d();
-	int i = p.x_loc;
+	pixel_info nearest;
+	int c;
+	float topGrad, botGrad;
+	topGrad = botGrad = 0;
 	int jtop = std::max(p.y_loc - 1, 0);
-	int jbot = std::min(p.y_loc + 1, omega.height() - 1);
-	float yGrad = 0;
-	int topWeight;
-	int botWeight;
-	if (i - 1 >= 0) {
-		if (!omega(i - 1, jtop)) {
-			yGrad += source(i - 1, jtop);
+	int jbot = std::min(p.y_loc + 1, source.height() - 1);
+	int i = p.x_loc - 1;
+	if (i >= 0) {
+		if (omega(i, jtop)) {
+			nearest = findNearest(i, jtop);
+			cimg_forC(source, c) {
+				topGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				topGrad += source(i, jtop, c);
+			}
 		}
-		yGrad -= omega(i - 1, jbot);
-		yGrad += omega(i - 1, jtop);
+		if (omega(i, jbot)) {
+			nearest = findNearest(i, jbot);
+			cimg_forC(source, c) {
+				botGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				botGrad += source(i, jbot, c);
+			}
+		}
 	}
+	i++;
+	if (omega(i, jtop)) {
+		nearest = findNearest(i, jtop);
+		cimg_forC(source, c) {
+			topGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
+		}
+	} else {
+		cimg_forC(source, c) {
+			topGrad += 2 * source(i, jtop, c);
+		}
+	}
+	if (omega(i, jbot)) {
+		nearest = findNearest(i, jbot);
+		cimg_forC(source, c) {
+			botGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
+		}
+	} else {
+		cimg_forC(source, c) {
+			botGrad += 2 * source(i, jbot, c);
+		}
+	}
+	i++;
+	if (i < source.width()) {
+		if (omega(i, jtop)) {
+			nearest = findNearest(i, jtop);
+			cimg_forC(source, c) {
+				topGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				topGrad += source(i, jtop, c);
+			}
+		}
+		if (omega(i, jbot)) {
+			nearest = findNearest(i, jbot);
+			cimg_forC(source, c) {
+				botGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				botGrad += source(i, jbot, c);
+			}
+		}
+	}
+	float leftGrad, rightGrad;
+	leftGrad = rightGrad = 0;
+	int ileft = std::max(p.x_loc - 1, 0);
+	int iright = std::min(p.x_loc + 1, source.width() - 1);
+	int j = p.y_loc - 1;
+	if (j >= 0) {
+		if (omega(iright, j)) {
+			nearest = findNearest(iright, j);
+			cimg_forC(source, c) {
+				rightGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				rightGrad += source(iright, j, c);
+			}
+		}
+		if (omega(ileft, j)) {
+			nearest = findNearest(ileft, j);
+			cimg_forC(source, c) {
+				leftGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				leftGrad += source(ileft, j, c);
+			}
+		}
+	}
+	j++;
+	if (omega(iright, j)) {
+		nearest = findNearest(iright, j);
+		cimg_forC(source, c) {
+			rightGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
+		}
+	} else {
+		cimg_forC(source, c) {
+			rightGrad += 2 * source(iright, j, c);
+		}
+	}
+	if (omega(ileft, j)) {
+		nearest = findNearest(ileft, j);
+		cimg_forC(source, c) {
+			leftGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
+		}
+	} else {
+		cimg_forC(source, c) {
+			leftGrad += 2 * source(ileft, j, c);
+		}
+	}
+	j++;
+	if (j < source.height()) {
+		if (omega(iright, j)) {
+			nearest = findNearest(iright, j);
+			cimg_forC(source, c) {
+				rightGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				rightGrad += source(iright, j, c);
+			}
+		}
+		if (omega(ileft, j)) {
+			nearest = findNearest(ileft, j);
+			cimg_forC(source, c) {
+				leftGrad += source(nearest.x_loc, nearest.y_loc, c);
+			}
+		} else {
+			cimg_forC(source, c) {
+				leftGrad += source(ileft, j, c);
+			}
+		}
+	}
+
+	gradient.x = rightGrad - leftGrad;
+	gradient.y = botGrad - topGrad;
+	gradient.normalize();
 	return gradient;
 }
 
+void inpaint() {
+	while (!fillfront.empty()) {
+
+		//compute priorities
+
+		//get next patch to fill
+		pixel_info next = get_priority();
+
+		//get minimum patch
+		pixel_info min_patch;
+		float min = std::numeric_limits<float>::max();
+		for (int i = 4; i < source.width() - 4; i++) {
+			for (int j = 4; j < source.height() - 4; j++) {
+				float temp = SSD(next, i, j);
+				if (temp < min) {
+					min_patch.x_loc = i;
+					min_patch.y_loc = j;
+					min = temp;
+				}
+			}
+		}
+
+		//fill
+		for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
+			for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
+				if (omega(i, j)) {
+					source(i, j, 0, 0) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 0);
+					source(i, j, 0, 1) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 1);
+					source(i, j, 0, 2) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 2);
+				}
+			}
+		}
+
+		//recalculate confidences
+		confidence(next);
+
+		//add to fillfront
+	}
+}
 
 int main(int argc, char *argv[]) {
 	if (argc == 3) {
@@ -147,12 +415,14 @@ int main(int argc, char *argv[]) {
 			for (int j = squaretop; j < squaretop + squaresize; j++) {
 				pixel_info p = {i, j, 0, 0, 0};
 				getNormal(p);
+				// printf("%f %f %f\n", source(0, 0, 1));
+				getGradient(p);
 			}
 		}
 		confidence_values.display();
 		source.display();
 	} else {
-		printf("You must parameters like so: /imagequilt [in file] [square size]\n");
+		printf("You must input parameters like so: /imagequilt [in file] [square size]\n");
 		return 0;
 	}
 
