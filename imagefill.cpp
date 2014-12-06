@@ -359,6 +359,119 @@ Vector2d getGradient(pixel_info &p) {
 	return gradient;
 }
 
+Vector2d getGradient_old(pixel_info &p) {
+	Vector2d gradient = Vector2d();
+	int i = p.x_loc - 1;
+	int jtop = std::max(p.y_loc - 1, 0);
+	int jbot = std::min(p.y_loc + 1, source.height() - 1);
+	float topGrad, botGrad;
+	topGrad = botGrad = 0;
+	int topWeight, botWeight;
+	topWeight = botWeight = 0;
+	int c;
+	if (i >= 0) {
+		if (!omega(i, jtop)) {
+			cimg_forC(source, c) {
+				topGrad += source(i, jtop, c);
+			}
+			topWeight++;
+		}
+		if (!omega(i, jbot)) {
+			cimg_forC(source, c) {
+				botGrad -= source(i, jbot, c);
+			}
+			botWeight++;
+		}
+	}
+	i++;
+	if (!omega(i, jtop)) {
+		cimg_forC(source, c) {
+			topGrad += 2 * source(i, jtop, c);
+		}
+		topWeight += 2;
+	}
+	if (!omega(i, jbot)) {
+		cimg_forC(source, c) {
+			botGrad -= 2 * source(i, jbot, c);
+		}
+		botWeight += 2;
+	}
+	i++;
+	if (i < source.width()) {
+		if (!omega(i, jtop)) {
+			cimg_forC(source, c) {
+				topGrad += source(i, jtop, c);
+			}
+			topWeight++;
+		}
+		if (!omega(i, jbot)) {
+			cimg_forC(source, c) {
+				botGrad -= source(i, jbot, c);
+			}
+			botWeight++;
+		}
+	}
+	int j = p.y_loc - 1;
+	int ileft = std::max(p.x_loc - 1, 0);
+	int iright = std::min(p.x_loc + 1, source.width() - 1);
+	float leftGrad, rightGrad;
+	leftGrad = rightGrad = 0;
+	int leftWeight, rightWeight;
+	leftWeight = rightWeight = 0;
+	if (j >= 0) {
+		if (!omega(iright, j)) {
+			cimg_forC(source, c) {
+				rightGrad += source(iright, j, c);
+			}
+			rightWeight++;
+		}
+		if (!omega(ileft, j)) {
+			cimg_forC(source, c) {
+				leftGrad -= source(ileft, j, c);
+			}
+			leftWeight++;
+		}
+	}
+	j++;
+	if (!omega(iright, j)) {
+		cimg_forC(source, c) {
+			rightGrad += 2 * source(iright, j, c);
+		}
+		rightWeight += 2;
+	}
+	if (!omega(ileft, j)) {
+		cimg_forC(source, c) {
+			leftGrad -= 2 * source(ileft, j, c);
+		}
+		leftWeight += 2;
+	}
+	j++;
+	if (j < source.height()) {
+		if (!omega(iright, j)) {
+			cimg_forC(source, c) {
+				rightGrad += source(iright, j, c);
+			}
+			rightWeight++;
+		}
+		if (!omega(ileft, j)) {
+			cimg_forC(source, c) {
+				leftGrad -= source(ileft, j, c);
+			}
+			leftWeight++;
+		}
+	}
+
+	float yWeight = topWeight / botWeight;
+	botGrad *= yWeight;
+	float xWeight = rightWeight / leftWeight;
+	leftGrad *= xWeight;
+	gradient.x = leftGrad + rightGrad;
+	gradient.y = topGrad + botGrad;
+	gradient.x *= (topWeight / rightWeight);
+	gradient.normalize();
+	return gradient;
+}
+
 void inpaint() {
 	while (!fillfront.empty()) {
 
