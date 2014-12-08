@@ -45,12 +45,17 @@ public:
 	};
 	void normalize() {
 		float length = std::sqrt(y * y + x * x);
-		x /= length;
-		y /= length;
+		if (length > 0) {
+			x /= length;
+			y /= length;
+		}
 	};
-	float operator*(Vector2d &v1) {
+	float operator*(Vector2d v1) {
 		return x * v1.x + y * v1.y;
 	};
+	bool isZero() {
+		return x == 0 && y == 0;
+	}
 };
 
 void confidence(pixel_info &p) {
@@ -120,14 +125,14 @@ Vector2d getNormal(pixel_info &p) {
 	int jbot = std::min(p.y_loc + 1, omega.height() - 1);
 	float yGrad = 0;
 	if (i - 1 >= 0) {
-		yGrad -= omega(i - 1, jbot);
-		yGrad += omega(i - 1, jtop);
+		yGrad += omega(i - 1, jbot);
+		yGrad -= omega(i - 1, jtop);
 	}
-	yGrad -= 2 * omega(i, jbot);
-	yGrad += 2 * omega(i, jtop);
+	yGrad += 2 * omega(i, jbot);
+	yGrad -= 2 * omega(i, jtop);
 	if (i + 1 < omega.width()) {
-		yGrad -= omega(i + 1, jbot);
-		yGrad += omega(i + 1, jtop);
+		yGrad += omega(i + 1, jbot);
+		yGrad -= omega(i + 1, jtop);
 	}
 	int j = p.y_loc;
 	int ileft = std::max(p.x_loc - 1, 0);
@@ -143,71 +148,49 @@ Vector2d getNormal(pixel_info &p) {
 		xGrad -= omega(ileft, j + 1);
 		xGrad += omega(iright, j + 1);
 	}
-	float length = std::sqrt(yGrad * yGrad + xGrad * xGrad);
 	normal.x = xGrad;
 	normal.y = yGrad;
 	normal.normalize();
 	return normal;
 }
 
-
-void searchBorder(int width, int x_loc, int y_loc, pixel_info &nearest) {
-	int x, y, xmin, xmax, ymin, ymax;
-	x = x_loc;
-	y = fmax(y_loc + width / 2, 0.0);
-	xmax = fmin(x + width / 2, source.width() - 1);
-	ymax = fmin(y + width / 2, source.height() - 1);
-	xmin = fmax(x - width / 2, 0.0);
-	xmax = fmax(y - width / 2, 0.0);
-	for (; x <= xmax; x++) {
-		if (!omega(x, y)) {
-			nearest.x_loc = x;
-			nearest.y_loc = y;
-			return;
+pixel_info directionalSearch(Vector2d dir, int x_loc, int y_loc) {
+	pixel_info nearest = { -1, -1, 0, 0, 0};
+	float x, y;
+	x = x_loc + 0.5;
+	y = y_loc + 0.5;
+	x += dir.x;
+	y += dir.y;
+	nearest.x_loc = (int) x;
+	nearest.y_loc = (int) y;
+	while (nearest.x_loc >= 0 && nearest.y_loc >= 0 && nearest.x_loc < source.width() && nearest.y_loc < source.height()) {
+		if (!(omega(nearest.x_loc, nearest.y_loc))) {
+			return nearest;
 		}
-	}
-	for (; y <= ymax; y++) {
-		if (!omega(x, y)) {
-			nearest.x_loc = x;
-			nearest.y_loc = y;
-			return;
-		}
-	}
-	for (; x >= xmin; x--) {
-		if (!omega(x, y)) {
-			nearest.x_loc = x;
-			nearest.y_loc = y;
-			return;
-		}
-	}
-	for (; y >= ymin; y--) {
-		if (!omega(x, y)) {
-			nearest.x_loc = x;
-			nearest.y_loc = y;
-			return;
-		}
-	}
-	for (; x < x_loc; x++) {
-		if (!omega(x, y)) {
-			nearest.x_loc = x;
-			nearest.y_loc = y;
-			return;
-		}
+		x += dir.x;
+		y += dir.y;
+		nearest.x_loc = (int) x;
+		nearest.y_loc = (int) y;
 	}
 }
 
-pixel_info findNearest(int x, int y) {
-	int width = 3;
-	pixel_info nearest = { -1, -1, 0, 0, 0};
-	while (nearest.x_loc == -1) {
-		searchBorder(width, x, y, nearest);
-		width += 2;
+float luminance(int x, int y) {
+	float l = 0.2126 * source(x, y, 0, 0);
+	if (source.spectrum() == 3) {
+		l += 0.7152 * source(x, y, 0, 1);
+		l += 0.0722 * source(x, y, 0, 2);
 	}
-	return nearest;
+	return l;
 }
 
 Vector2d getGradient(pixel_info &p) {
 	Vector2d gradient = Vector2d();
+	Vector2d normal = getNormal(p);
+	if (normal.isZero()) {
+		return gradient;
+	}
+	normal.x = normal.x * -1;
+	normal.y = normal.y * -1;
 	pixel_info nearest;
 	int c;
 	float topGrad, botGrad;
@@ -217,68 +200,44 @@ Vector2d getGradient(pixel_info &p) {
 	int i = p.x_loc - 1;
 	if (i >= 0) {
 		if (omega(i, jtop)) {
-			nearest = findNearest(i, jtop);
-			cimg_forC(source, c) {
-				topGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, i, jtop);
+			topGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				topGrad += source(i, jtop, c);
-			}
+			topGrad += luminance(i, jtop);
 		}
 		if (omega(i, jbot)) {
-			nearest = findNearest(i, jbot);
-			cimg_forC(source, c) {
-				botGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, i, jbot);
+			botGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				botGrad += source(i, jbot, c);
-			}
+			botGrad += luminance(i, jbot);
 		}
 	}
 	i++;
 	if (omega(i, jtop)) {
-		nearest = findNearest(i, jtop);
-		cimg_forC(source, c) {
-			topGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
-		}
+		nearest = directionalSearch(normal, i, jtop);
+		topGrad += 2 * luminance(nearest.x_loc, nearest.y_loc);
 	} else {
-		cimg_forC(source, c) {
-			topGrad += 2 * source(i, jtop, c);
-		}
+		topGrad += 2 * luminance(i, jtop);
 	}
 	if (omega(i, jbot)) {
-		nearest = findNearest(i, jbot);
-		cimg_forC(source, c) {
-			botGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
-		}
+		nearest = directionalSearch(normal, i, jbot);
+		botGrad += 2 * luminance(nearest.x_loc, nearest.y_loc);
 	} else {
-		cimg_forC(source, c) {
-			botGrad += 2 * source(i, jbot, c);
-		}
+		botGrad += 2 * luminance(i, jbot);
 	}
 	i++;
 	if (i < source.width()) {
 		if (omega(i, jtop)) {
-			nearest = findNearest(i, jtop);
-			cimg_forC(source, c) {
-				topGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, i, jtop);
+			topGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				topGrad += source(i, jtop, c);
-			}
+			topGrad += luminance(i, jtop);
 		}
 		if (omega(i, jbot)) {
-			nearest = findNearest(i, jbot);
-			cimg_forC(source, c) {
-				botGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, i, jbot);
+			botGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				botGrad += source(i, jbot, c);
-			}
+			botGrad += luminance(i, jbot);
 		}
 	}
 	float leftGrad, rightGrad;
@@ -288,135 +247,110 @@ Vector2d getGradient(pixel_info &p) {
 	int j = p.y_loc - 1;
 	if (j >= 0) {
 		if (omega(iright, j)) {
-			nearest = findNearest(iright, j);
-			cimg_forC(source, c) {
-				rightGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, iright, j);
+			rightGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				rightGrad += source(iright, j, c);
-			}
+			rightGrad += luminance(iright, j);
 		}
 		if (omega(ileft, j)) {
-			nearest = findNearest(ileft, j);
-			cimg_forC(source, c) {
-				leftGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, ileft, j);
+			leftGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				leftGrad += source(ileft, j, c);
-			}
+			leftGrad += luminance(ileft, j);
 		}
 	}
 	j++;
 	if (omega(iright, j)) {
-		nearest = findNearest(iright, j);
-		cimg_forC(source, c) {
-			rightGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
-		}
+		nearest = directionalSearch(normal, iright, j);
+		rightGrad += 2 * luminance(nearest.x_loc, nearest.y_loc);
 	} else {
-		cimg_forC(source, c) {
-			rightGrad += 2 * source(iright, j, c);
-		}
+		rightGrad += 2 * luminance(iright, j);
 	}
 	if (omega(ileft, j)) {
-		nearest = findNearest(ileft, j);
-		cimg_forC(source, c) {
-			leftGrad += 2 * source(nearest.x_loc, nearest.y_loc, c);
-		}
+		nearest = directionalSearch(normal, ileft, j);
+		leftGrad += 2 * luminance(nearest.x_loc, nearest.y_loc);
 	} else {
-		cimg_forC(source, c) {
-			leftGrad += 2 * source(ileft, j, c);
-		}
+		leftGrad += 2 * luminance(ileft, j);
 	}
 	j++;
 	if (j < source.height()) {
 		if (omega(iright, j)) {
-			nearest = findNearest(iright, j);
-			cimg_forC(source, c) {
-				rightGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, iright, j);
+			rightGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				rightGrad += source(iright, j, c);
-			}
+			rightGrad += luminance(iright, j);
 		}
 		if (omega(ileft, j)) {
-			nearest = findNearest(ileft, j);
-			cimg_forC(source, c) {
-				leftGrad += source(nearest.x_loc, nearest.y_loc, c);
-			}
+			nearest = directionalSearch(normal, ileft, j);
+			leftGrad += luminance(nearest.x_loc, nearest.y_loc);
 		} else {
-			cimg_forC(source, c) {
-				leftGrad += source(ileft, j, c);
-			}
+			leftGrad += luminance(ileft, j);
 		}
 	}
 
-	gradient.x = rightGrad - leftGrad;
-	gradient.y = botGrad - topGrad;
-	gradient.normalize();
+	gradient.y = rightGrad - leftGrad;
+	gradient.x = botGrad - topGrad;
 	return gradient;
 }
 
-void inpaint() {
-	while (!fillfront.empty()) {
+// void inpaint() {
+//  while (!fillfront.empty()) {
 
-		//compute priorities
+//      //compute priorities
 
-		//get next patch to fill
-		pixel_info next = get_priority();
+//      //get next patch to fill
+//      pixel_info next = get_priority();
 
-		//get minimum patch
-		pixel_info min_patch;
-		float min = std::numeric_limits<float>::max();
-		for (int i = 4; i < source.width() - 4; i++) {
-			for (int j = 4; j < source.height() - 4; j++) {
-				float temp = SSD(next, i, j);
-				if (temp < min) {
-					min_patch.x_loc = i;
-					min_patch.y_loc = j;
-					min = temp;
-				}
-			}
-		}
+//      //get minimum patch
+//      pixel_info min_patch;
+//      float min = std::numeric_limits<float>::max();
+//      for (int i = 4; i < source.width() - 4; i++) {
+//          for (int j = 4; j < source.height() - 4; j++) {
+//              float temp = SSD(next, i, j);
+//              if (temp < min) {
+//                  min_patch.x_loc = i;
+//                  min_patch.y_loc = j;
+//                  min = temp;
+//              }
+//          }
+//      }
 
-		//fill
-		for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-			for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-				if (omega(i, j)) {
-					source(i, j, 0, 0) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 0);
-					source(i, j, 0, 1) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 1);
-					source(i, j, 0, 2) = source(min_patch.x_loc+i-p.x_loc, min_patch.y_loc+j-p.y_loc, 0, 2);
-					omega(i, j) = 0;
-				}
-			}
-		}
+//      //fill
+//      for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
+//          for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
+//              if (omega(i, j)) {
+//                  source(i, j, 0, 0) = source(min_patch.x_loc + i - p.x_loc, min_patch.y_loc + j - p.y_loc, 0, 0);
+//                  source(i, j, 0, 1) = source(min_patch.x_loc + i - p.x_loc, min_patch.y_loc + j - p.y_loc, 0, 1);
+//                  source(i, j, 0, 2) = source(min_patch.x_loc + i - p.x_loc, min_patch.y_loc + j - p.y_loc, 0, 2);
+//                  omega(i, j) = 0;
+//              }
+//          }
+//      }
 
-		//recalculate confidences
-		confidence(next);
+//      //recalculate confidences
+//      confidence(next);
 
-		//add to fillfront
-		for (int i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
-			for (int j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
-				if(i == std::max(p.x_loc - 4, 0) || i == std::min(p.x_loc + 4, source.width() - 1) || 
-					j == std::max(p.y_loc - 4, 0) || j == std::min(p.y_loc + 4, source.height() - 1)) {
-					// pixel_info d_sigma;
-					// d_sigma.x_loc = i;
-					// d_sigma.y_loc = j;
-					// d_sigma.conf = confidence_values(i, j);
-					// d_sigma.data = 0;
-					// d_sigma.priority = d_sigma.conf * d_sigma.data;
-					// if (!fillfront.contains(d_sigma)) {
-					// 	fillfront.push_back(d_sigma);
-					// } else {
-					// 	fillfront.pop();
-					// }
-				}
-			}
-		}
-	}
-}
+//      //add to fillfront
+//      for (int i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
+//          for (int j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
+//              if (i == std::max(p.x_loc - 4, 0) || i == std::min(p.x_loc + 4, source.width() - 1) ||
+//                      j == std::max(p.y_loc - 4, 0) || j == std::min(p.y_loc + 4, source.height() - 1)) {
+//                  // pixel_info d_sigma;
+//                  // d_sigma.x_loc = i;
+//                  // d_sigma.y_loc = j;
+//                  // d_sigma.conf = confidence_values(i, j);
+//                  // d_sigma.data = 0;
+//                  // d_sigma.priority = d_sigma.conf * d_sigma.data;
+//                  // if (!fillfront.contains(d_sigma)) {
+//                  //  fillfront.push_back(d_sigma);
+//                  // } else {
+//                  //  fillfront.pop();
+//                  // }
+//              }
+//          }
+//      }
+//  }
+// }
 
 int main(int argc, char *argv[]) {
 	if (argc == 3) {
@@ -425,6 +359,8 @@ int main(int argc, char *argv[]) {
 		srand (time(NULL));
 		squareleft = rand() % (source.width() - squaresize);
 		squaretop = rand() % (source.height() - squaresize);
+		// squareleft = 139;
+		// squaretop = 121;
 		squareright = squareleft + squaresize;
 		squarebottom = squaretop + squaresize;
 		init(source.width(), source.height(), squareleft, squaretop, squaresize);
@@ -433,9 +369,15 @@ int main(int argc, char *argv[]) {
 		for (int i = squareleft; i < squareleft + squaresize; i++) {
 			for (int j = squaretop; j < squaretop + squaresize; j++) {
 				pixel_info p = {i, j, 0, 0, 0};
-				getNormal(p);
-				// printf("%f %f %f\n", source(0, 0, 1));
-				getGradient(p);
+				if (i == 139 && j == 123) {
+					printf("%s\n", "jjjjjjjj");
+				}
+				confidence_values(i, j) = fabs(getNormal(p) * getGradient(p));
+				// printf("%f %f  %d %d\n", getGradient(p).x, getGradient(p).y, i, j);
+				int c;
+				cimg_forC(source, c) {
+					source(i, j, c) *= 0.5;
+				}
 			}
 		}
 		confidence_values.display();
