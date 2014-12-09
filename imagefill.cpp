@@ -53,6 +53,10 @@ public:
 	float operator*(Vector2d v1) {
 		return x * v1.x + y * v1.y;
 	};
+	void operator/=(float d) {
+		x /= d;
+		y /= d;
+	};
 	bool isZero() {
 		return x == 0 && y == 0;
 	}
@@ -175,10 +179,13 @@ pixel_info directionalSearch(Vector2d dir, int x_loc, int y_loc) {
 }
 
 float luminance(int x, int y) {
-	float l = 0.2126 * source(x, y, 0, 0);
+	float l;
 	if (source.spectrum() == 3) {
+		l = 0.2126 * source(x, y, 0, 0);
 		l += 0.7152 * source(x, y, 0, 1);
 		l += 0.0722 * source(x, y, 0, 2);
+	} else {
+		l = source(x, y, 0, 0);
 	}
 	return l;
 }
@@ -287,9 +294,9 @@ Vector2d getGradient(pixel_info &p) {
 			leftGrad += luminance(ileft, j);
 		}
 	}
-
 	gradient.y = rightGrad - leftGrad;
 	gradient.x = botGrad - topGrad;
+	gradient /= 1020;
 	return gradient;
 }
 
@@ -369,9 +376,6 @@ int main(int argc, char *argv[]) {
 		for (int i = squareleft; i < squareleft + squaresize; i++) {
 			for (int j = squaretop; j < squaretop + squaresize; j++) {
 				pixel_info p = {i, j, 0, 0, 0};
-				if (i == 139 && j == 123) {
-					printf("%s\n", "jjjjjjjj");
-				}
 				confidence_values(i, j) = fabs(getNormal(p) * getGradient(p));
 				// printf("%f %f  %d %d\n", getGradient(p).x, getGradient(p).y, i, j);
 				int c;
