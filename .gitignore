@@ -29,6 +29,6 @@
 
 
 #images
-*.pgm
-*.jpg
-*.png
+#*.pgm
+#*.jpg
+#*.png
