@@ -312,67 +312,70 @@ Vector2d getGradient(pixel_info &p) {
 	return gradient;
 }
 
+float data(pixel_info &p) {
+	return fabs(getGradient(p) * getNormal(p));
+}
+
 void inpaint() {
- while (!fillfront.empty()) {
+	while (!fillfront.empty()) {	
+	    //compute priorities
+	 	for (int i = 0; i < fillfront.size(); i++) {
+	 		fillfront[i].conf = confidence(fillfront[i]);
+	 		fillfront[i].data = data(fillfront[i]);
+	 		fillfront[i].priority = fillfront[i].conf * fillfront[i].data;
+	 	}
 
-    //compute priorities
- 	for (int i = 0; i < fillfront.size(); i++) {
- 		fillfront[i].conf = confidence(fillfront[i]);
- 		fillfront[i].data = data(fillfront[i]);
- 		fillfront[i].priority = fillfront[i].conf * fillfront[i].data;
- 	}
+		//get next patch to fill
+		pixel_info next = get_priority();
 
-     //get next patch to fill
-     pixel_info next = get_priority();
+	     //get minimum patch
+	     pixel_info min_patch;
+	     float min = std::numeric_limits<float>::max();
+	     for (int i = 4; i < source.width() - 4; i++) {
+	         for (int j = 4; j < source.height() - 4; j++) {
+	         	if (!omega(i, j)) {
+	             	float temp = SSD(next, i, j);
+		             if (temp < min) {
+		                 min_patch.x_loc = i;
+		                 min_patch.y_loc = j;
+		                 min = temp;
+		             }
+		         }
+	         }
+	     }
 
-     //get minimum patch
-     pixel_info min_patch;
-     float min = std::numeric_limits<float>::max();
-     for (int i = 4; i < source.width() - 4; i++) {
-         for (int j = 4; j < source.height() - 4; j++) {
-         	if (!omega(i, j)) {
-             	float temp = SSD(next, i, j);
-	             if (temp < min) {
-	                 min_patch.x_loc = i;
-	                 min_patch.y_loc = j;
-	                 min = temp;
+	     //fill
+	     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
+	         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
+	             if (omega(i, j)) {
+	                 source(i, j, 0, 0) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 0);
+	                 source(i, j, 0, 1) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 1);
+	                 source(i, j, 0, 2) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 2);
+	                 omega(i, j) = 0;
+	                 front(i, j) = 0;
+	                 confidence_values(i, j) = next.conf;
 	             }
 	         }
-         }
-     }
+	     }
 
-     //fill
-     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-             if (omega(i, j)) {
-                 source(i, j, 0, 0) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 0);
-                 source(i, j, 0, 1) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 1);
-                 source(i, j, 0, 2) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 2);
-                 omega(i, j) = 0;
-                 front(i, j) = 0;
-                 confidence_values(i, j) = next.conf;
-             }
-         }
-     }
+	     source.display();
 
-     source.display();
-
-     //add to fillfront
-     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-             if (i == std::max(next.x_loc - 4, 0) || i == std::min(next.x_loc + 4, source.width() - 1) ||
-                     j == std::max(next.y_loc - 4, 0) || j == std::min(next.y_loc + 4, source.height() - 1)) {
-                 pixel_info d_sigma;
-                 d_sigma.x_loc = i;
-                 d_sigma.y_loc = j;
-                 if (!front(i, j)) {
-                  	fillfront.push_back(d_sigma);
-                  	front(i, j) = 1;
-                 } 
-             }
-         }
-     }
- }
+	     //add to fillfront
+	     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
+	         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
+	             if (i == std::max(next.x_loc - 4, 0) || i == std::min(next.x_loc + 4, source.width() - 1) ||
+	                     j == std::max(next.y_loc - 4, 0) || j == std::min(next.y_loc + 4, source.height() - 1)) {
+	                 pixel_info d_sigma;
+	                 d_sigma.x_loc = i;
+	                 d_sigma.y_loc = j;
+	                 if (!front(i, j)) {
+	                  	fillfront.push_back(d_sigma);
+	                  	front(i, j) = 1;
+	                 } 
+	             }
+	         }
+	     }
+	}
 }
 
 int main(int argc, char *argv[]) {
