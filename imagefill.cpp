@@ -64,7 +64,7 @@ public:
 	}
 };
 
-void confidence(pixel_info &p) {
+float confidence(pixel_info &p) {
 	int i, j;
 	float temp_conf = 0;
 	int area = (std::min(p.x_loc + 4, source.width() - 1) - std::max(p.x_loc - 4, 0)) * (std::min(p.y_loc + 4, source.height() - 1) - std::max(p.y_loc - 4, 0));
@@ -77,6 +77,7 @@ void confidence(pixel_info &p) {
 	}
 	p.conf = temp_conf / area;
 	confidence_values(p.x_loc, p.y_loc) = p.conf;
+	return p.conf;
 }
 
 void init(int width, int height, CImg<unsigned char> matte) {
@@ -118,7 +119,7 @@ pixel_info get_priority() {
 float SSD(pixel_info p, int qx, int qy) {
 	int i, j;
 	float sum = 0;
-	for (i = std::max(p.x_loc - 4; i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
+	for (i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
 		for (j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
 			if (!omega(qx, qy)) {
 				if (!omega(i, j)) {
