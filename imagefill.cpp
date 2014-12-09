@@ -300,63 +300,68 @@ Vector2d getGradient(pixel_info &p) {
 	return gradient;
 }
 
+float data(pixel_info &p) {
+	return fabs(getGradient(p) * getNormal(p));
+}
+
 void inpaint() {
- while (!fillfront.empty()) {
+	while (!fillfront.empty()) {
 
-     //compute priorities
+		//compute priorities
 
-     //get next patch to fill
-     pixel_info next = get_priority();
+		//get next patch to fill
+		pixel_info next = get_priority();
 
-     //get minimum patch
-     pixel_info min_patch;
-     float min = std::numeric_limits<float>::max();
-     for (int i = 4; i < source.width() - 4; i++) {
-         for (int j = 4; j < source.height() - 4; j++) {
-             float temp = SSD(next, i, j);
-             if (temp < min) {
-                 min_patch.x_loc = i;
-                 min_patch.y_loc = j;
-                 min = temp;
-             }
-         }
-     }
+		//get minimum patch
+		pixel_info min_patch;
+		float min = std::numeric_limits<float>::max();
+		for (int i = 4; i < source.width() - 4; i++) {
+			for (int j = 4; j < source.height() - 4; j++) {
+				float temp = SSD(next, i, j);
+				if (temp < min) {
+					min_patch.x_loc = i;
+					min_patch.y_loc = j;
+					min = temp;
+				}
+			}
+		}
 
-     //fill
-     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-             if (omega(i, j)) {
-                 source(i, j, 0, 0) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 0);
-                 source(i, j, 0, 1) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 1);
-                 source(i, j, 0, 2) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 2);
-                 omega(i, j) = 0;
-             }
-         }
-     }
+		//fill
+		for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
+			for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
+				if (omega(i, j)) {
+					source(i, j, 0, 0) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 0);
+					source(i, j, 0, 1) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 1);
+					source(i, j, 0, 2) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 2);
+					confidence_values(i, j) = next.conf;
+					omega(i, j) = 0;
+				}
+			}
+		}
 
-     //recalculate confidences
-     confidence(next);
+		//recalculate confidences
+		// confidence(next);
 
-     //add to fillfront
-     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-             if (i == std::max(next.x_loc - 4, 0) || i == std::min(next.x_loc + 4, source.width() - 1) ||
-                     j == std::max(next.y_loc - 4, 0) || j == std::min(next.y_loc + 4, source.height() - 1)) {
-                 // pixel_info d_sigma;
-                 // d_sigma.x_loc = i;
-                 // d_sigma.y_loc = j;
-                 // d_sigma.conf = confidence_values(i, j);
-                 // d_sigma.data = 0;
-                 // d_sigma.priority = d_sigma.conf * d_sigma.data;
-                 // if (!fillfront.contains(d_sigma)) {
-                 //  fillfront.push_back(d_sigma);
-                 // } else {
-                 //  fillfront.pop();
-                 // }
-             }
-         }
-     }
- }
+		//add to fillfront
+		for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
+			for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
+				if (i == std::max(next.x_loc - 4, 0) || i == std::min(next.x_loc + 4, source.width() - 1) ||
+				        j == std::max(next.y_loc - 4, 0) || j == std::min(next.y_loc + 4, source.height() - 1)) {
+					// pixel_info d_sigma;
+					// d_sigma.x_loc = i;
+					// d_sigma.y_loc = j;
+					// d_sigma.conf = confidence_values(i, j);
+					// d_sigma.data = 0;
+					// d_sigma.priority = d_sigma.conf * d_sigma.data;
+					// if (!fillfront.contains(d_sigma)) {
+					//  fillfront.push_back(d_sigma);
+					// } else {
+					//  fillfront.pop();
+					// }
+				}
+			}
+		}
+	}
 }
 
 int main(int argc, char *argv[]) {
