@@ -366,25 +366,10 @@ int main(int argc, char *argv[]) {
 		srand (time(NULL));
 		squareleft = rand() % (source.width() - squaresize);
 		squaretop = rand() % (source.height() - squaresize);
-		// squareleft = 139;
-		// squaretop = 121;
 		squareright = squareleft + squaresize;
 		squarebottom = squaretop + squaresize;
 		init(source.width(), source.height(), squareleft, squaretop, squaresize);
 
-		// testing normal
-		for (int i = squareleft; i < squareleft + squaresize; i++) {
-			for (int j = squaretop; j < squaretop + squaresize; j++) {
-				pixel_info p = {i, j, 0, 0, 0};
-				confidence_values(i, j) = fabs(getNormal(p) * getGradient(p));
-				// printf("%f %f  %d %d\n", getGradient(p).x, getGradient(p).y, i, j);
-				int c;
-				cimg_forC(source, c) {
-					source(i, j, c) *= 0.5;
-				}
-			}
-		}
-		confidence_values.display();
 		source.display();
 	} else {
 		printf("You must input parameters like so: /imagequilt [in file] [square size]\n");
