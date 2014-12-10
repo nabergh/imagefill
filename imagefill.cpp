@@ -113,7 +113,7 @@ void init(int x, int y, int width, int height) {
 	int i, j;
 	for (i = 0; i < source.width(); i++) {
 		for (j = 0; j < source.height(); j++) {
-			if ((i < x || i > x+width) || (j < y || j > y+height)) {
+			if ((i < x || i > x + width) || (j < y || j > y + height)) {
 				confidence_values(i, j) = 0;
 				omega(i, j) = 1;
 				cimg_forC(source, c) {
@@ -358,9 +358,8 @@ float data(pixel_info &p) {
 	return fabs(getGradient(p) * getNormal(p));
 }
 
-void inpaint() {
+void inpaint(char *fname) {
 	int counter = 0;
-	// source.display();
 	while (!fillfront.empty()) {
 		//compute priorities
 		for (int i = 0; i < fillfront.size(); i++) {
@@ -406,10 +405,10 @@ void inpaint() {
 			}
 		}
 
-		// if (counter++ == 10) {
-		// 	counter = 0;
-		// 	source.display();
-		// }
+		if (counter++ == 10) {
+			counter = 0;
+			source.save(fname);
+		}
 
 		//add to fillfront
 		for (int i = std::max(next.x_loc - (rad + 1), 0); i <= std::min(next.x_loc + (rad + 1), source.width() - 1); i++) {
@@ -448,12 +447,12 @@ int main(int argc, char *argv[]) {
 		orig = CImg<unsigned char>(source);
 
 		init(CImg<unsigned char>(argv[2]));
-		inpaint();
+		inpaint(argv[3]);
 
 		// source.display();
 		CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
 		img_display.move(200, 200);
-		orig_display.move(source.width()+200, 200);
+		orig_display.move(source.width() + 200, 200);
 		while (!img_display.is_closed() && !orig_display.is_closed()) {
 			img_display.wait();
 		}
@@ -478,7 +477,7 @@ int main(int argc, char *argv[]) {
 		int y = atoi(argv[6]);
 
 		init(x, y, orig.width(), orig.height());
-		inpaint();
+		inpaint(argv[3]);
 
 		CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
 		img_display.move(200, 200);
