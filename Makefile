@@ -8,4 +8,4 @@ makematte:
 	g++ -o makematte makematte.cpp -lpthread -lX11 -g
 
 clean:
-	/bin/rm -f makematte imagefill
+	/bin/rm -f makematte

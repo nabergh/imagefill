@@ -8,16 +8,13 @@ using namespace cimg_library;
 
 
 CImg<unsigned char> source;
+CImg<unsigned char> lab;
+CImg<unsigned char> orig;
 CImg<unsigned char> matte;
-CImg<unsigned char> result;
 CImg<float> confidence_values;
 CImg<bool> front;
 CImg<bool> omega;
-int squareleft;
-int squareright;
-int squaretop;
-int squarebottom;
-int squaresize;
+int rad = 4;
 
 struct pixel_info {
 	int x_loc;
@@ -67,9 +64,9 @@ public:
 float confidence(pixel_info &p) {
 	int i, j;
 	float temp_conf = 0;
-	int area = (std::min(p.x_loc + 4, source.width() - 1) - std::max(p.x_loc - 4, 0)) * (std::min(p.y_loc + 4, source.height() - 1) - std::max(p.y_loc - 4, 0));
-	for (i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
-		for (j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
+	int area = (std::min(p.x_loc + rad, source.width() - 1) - std::max(p.x_loc - rad, 0)) * (std::min(p.y_loc + rad, source.height() - 1) - std::max(p.y_loc - rad, 0));
+	for (i = std::max(p.x_loc - rad, 0); i <= std::min(p.x_loc + rad, source.width() - 1); i++) {
+		for (j = std::max(p.y_loc - rad, 0); j <= std::min(p.y_loc + rad, source.height() - 1); j++) {
 			if (!omega(i, j)) {
 				temp_conf = temp_conf + confidence_values(i, j);
 			}
@@ -81,8 +78,8 @@ float confidence(pixel_info &p) {
 }
 
 void init(int width, int height, CImg<unsigned char> matte) {
+	lab = source.get_RGBtoLab();
 	confidence_values = CImg<float>(source.width(), source.height(), 1, 1, 1);
-	result = CImg<unsigned char>(source);
 	omega = CImg<bool>(source.width(), source.height(), 1, 1, 0);
 	front = CImg<bool>(source.width(), source.height(), 1, 1, 0);
 	int i, j;
@@ -91,7 +88,7 @@ void init(int width, int height, CImg<unsigned char> matte) {
 			if (matte(i, j) == 255) {
 				confidence_values(i, j) = 0;
 				omega(i, j) = 1;
-				if ( (i > 0 && matte(i-1, j) != 255) || (i < width-1 && matte(i+1, j) != 255) || (j > 0 && matte(i, j-1) != 255) || (j < height-1 && matte(i,j+1) != 255) ) {
+				if ( (i > 0 && matte(i - 1, j) != 255) || (i < width - 1 && matte(i + 1, j) != 255) || (j > 0 && matte(i, j - 1) != 255) || (j < height - 1 && matte(i, j + 1) != 255) ) {
 					pixel_info d_sigma;
 					d_sigma.x_loc = i;
 					d_sigma.y_loc = j;
@@ -100,7 +97,10 @@ void init(int width, int height, CImg<unsigned char> matte) {
 					d_sigma.priority = d_sigma.conf * d_sigma.data;
 					fillfront.push_back(d_sigma);
 					front(i, j) = 1;
-
+				}
+				int c;
+				cimg_forC(source, c) {
+					source(i, j, c) = 0;
 				}
 			}
 		}
@@ -109,29 +109,38 @@ void init(int width, int height, CImg<unsigned char> matte) {
 }
 
 pixel_info get_priority() {
-	std::make_heap(fillfront.begin(), fillfront.end(), comparePriority);
-	pixel_info p = fillfront.front();
-	std::pop_heap(fillfront.begin(), fillfront.end(), comparePriority);
-	fillfront.pop_back();
+	pixel_info p;
+	do {
+		std::make_heap(fillfront.begin(), fillfront.end(), comparePriority);
+		p = fillfront.front();
+		std::pop_heap(fillfront.begin(), fillfront.end(), comparePriority);
+		fillfront.pop_back();
+	} while (!fillfront.empty() && !front(p.x_loc, p.y_loc));
 	front(p.x_loc, p.y_loc) = 0;
 	return p;
 }
+
+Vector2d getGradient(pixel_info &p);
 float SSD(pixel_info p, int qx, int qy) {
-	int i, j;
+	int i, j, c;
 	float sum = 0;
-	for (i = std::max(p.x_loc - 4, 0); i <= std::min(p.x_loc + 4, source.width() - 1); i++) {
-		for (j = std::max(p.y_loc - 4, 0); j <= std::min(p.y_loc + 4, source.height() - 1); j++) {
-			if (!omega(qx, qy)) {
+	for (i = std::max(p.x_loc - rad, 0); i <= std::min(p.x_loc + rad, source.width() - 1); i++) {
+		for (j = std::max(p.y_loc - rad, 0); j <= std::min(p.y_loc + rad, source.height() - 1); j++) {
+			if (!omega(qx + i - p.x_loc, qy + j - p.y_loc)) {
 				if (!omega(i, j)) {
-					sum = sum + pow(source(i, j, 0, 0) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, 0), 2) +
-					      pow(source(i, j, 0, 1) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, 1), 2) +
-					      pow(source(i, j, 0, 2) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, 2), 2);
-				} else {
-					return FLT_MAX;
+					cimg_forC(lab, c) {
+						sum = sum + pow(lab(i, j, 0, c) - lab(qx + i - p.x_loc, qy + j - p.y_loc, 0, c), 2);
+					}
 				}
+			} else {
+				return FLT_MAX;
 			}
 		}
 	}
+	pixel_info newpatch = {qx, qy, 0, 0, 0};
+	Vector2d grad1 = getGradient(p);
+	Vector2d grad2 = getGradient(newpatch);
+	sum += pow(grad2.x - grad1.x, 2) + pow(grad2.y - grad1.y, 2);
 	return sum;
 }
 
@@ -318,79 +327,106 @@ float data(pixel_info &p) {
 }
 
 void inpaint() {
-	while (!fillfront.empty()) {	
-	    //compute priorities
-	 	for (int i = 0; i < fillfront.size(); i++) {
-	 		fillfront[i].conf = confidence(fillfront[i]);
-	 		fillfront[i].data = data(fillfront[i]);
-	 		fillfront[i].priority = fillfront[i].conf * fillfront[i].data;
-	 	}
+	while (!fillfront.empty()) {
+		//compute priorities
+		for (int i = 0; i < fillfront.size(); i++) {
+			fillfront[i].conf = confidence(fillfront[i]);
+			fillfront[i].data = data(fillfront[i]);
+			fillfront[i].priority = fillfront[i].conf * fillfront[i].data;
+		}
 
 		//get next patch to fill
 		pixel_info next = get_priority();
+		if (fillfront.empty()) {
+			break;
+		}
 
-	     //get minimum patch
-	     pixel_info min_patch;
-	     float min = std::numeric_limits<float>::max();
-	     for (int i = 4; i < source.width() - 4; i++) {
-	         for (int j = 4; j < source.height() - 4; j++) {
-	         	if (!omega(i, j)) {
-	             	float temp = SSD(next, i, j);
-		             if (temp < min) {
-		                 min_patch.x_loc = i;
-		                 min_patch.y_loc = j;
-		                 min = temp;
-		             }
-		         }
-	         }
-	     }
+		//get minimum patch
+		pixel_info min_patch;
+		float min = FLT_MAX;
+		for (int i = rad; i < source.width() - rad; i++) {
+			for (int j = rad; j < source.height() - rad; j++) {
+				if (!omega(i, j)) {
+					float temp = SSD(next, i, j);
+					if (temp < min) {
+						min_patch.x_loc = i;
+						min_patch.y_loc = j;
+						min = temp;
+					}
+				}
+			}
+		}
 
-	     //fill
-	     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-	         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-	             if (omega(i, j)) {
-	                 source(i, j, 0, 0) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 0);
-	                 source(i, j, 0, 1) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 1);
-	                 source(i, j, 0, 2) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, 2);
-	                 omega(i, j) = 0;
-	                 front(i, j) = 0;
-	                 confidence_values(i, j) = next.conf;
-	             }
-	         }
-	     }
+		//fill
+		int c;
+		for (int i = std::max(next.x_loc - rad, 0); i <= std::min(next.x_loc + rad, source.width() - 1); i++) {
+			for (int j = std::max(next.y_loc - rad, 0); j <= std::min(next.y_loc + rad, source.height() - 1); j++) {
+				if (omega(i, j)) {
+					cimg_forC(source, c) {
+						source(i, j, 0, c) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, c);
+					}
+					cimg_forC(lab, c) {
+						lab(i, j, 0, c) = lab(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, c);
+					}
+					omega(i, j) = 0;
+					front(i, j) = 0;
+					confidence_values(i, j) = next.conf;
+				}
+			}
+		}
 
-	     source.display();
+		// source.display();
 
-	     //add to fillfront
-	     for (int i = std::max(next.x_loc - 4, 0); i <= std::min(next.x_loc + 4, source.width() - 1); i++) {
-	         for (int j = std::max(next.y_loc - 4, 0); j <= std::min(next.y_loc + 4, source.height() - 1); j++) {
-	             if (i == std::max(next.x_loc - 4, 0) || i == std::min(next.x_loc + 4, source.width() - 1) ||
-	                     j == std::max(next.y_loc - 4, 0) || j == std::min(next.y_loc + 4, source.height() - 1)) {
-	                 pixel_info d_sigma;
-	                 d_sigma.x_loc = i;
-	                 d_sigma.y_loc = j;
-	                 if (!front(i, j)) {
-	                  	fillfront.push_back(d_sigma);
-	                  	front(i, j) = 1;
-	                 } 
-	             }
-	         }
-	     }
+		//add to fillfront
+		for (int i = std::max(next.x_loc - (rad + 1), 0); i <= std::min(next.x_loc + (rad + 1), source.width() - 1); i++) {
+			for (int j = std::max(next.y_loc - (rad + 1), 0); j <= std::min(next.y_loc + (rad + 1), source.height() - 1); j++) {
+				if (i == std::max(next.x_loc - (rad + 1), 0) || i == std::min(next.x_loc + (rad + 1), source.width() - 1) ||
+				        j == std::max(next.y_loc - (rad + 1), 0) || j == std::min(next.y_loc + (rad + 1), source.height() - 1)) {
+					pixel_info d_sigma;
+					d_sigma.x_loc = i;
+					d_sigma.y_loc = j;
+					if (!front(i, j) && omega(i, j)) {
+						fillfront.push_back(d_sigma);
+						front(i, j) = 1;
+					}
+				}
+			}
+		}
 	}
 }
 
 int main(int argc, char *argv[]) {
-	if (argc != 3) {
-		printf("You must input parameters like so: /imagequilt [in file] [matte]\n");
+	if (argc != 5) {
+		printf("You must input parameters like so: /imagequilt [in file] [matte] [out file] [patch radius]\n");
 		return 0;
 	}
-
-	source = CImg<unsigned char>(argv[1]);
+	rad = atoi(argv[4]);
+	CImg<unsigned char> img = CImg<unsigned char>(argv[1]);
+	int c;
+	if (img.spectrum() == 1) {
+		source = CImg<unsigned char>(img.width(), img.height(), 1, 3);
+		for (int i = 0; i < source.width(); ++i) {
+			for (int j = 0; j < source.height(); ++j) {
+				cimg_forC(source, c) {
+					source(i, j, c) = img(i, j);
+				}
+			}
+		}
+	} else
+		source = CImg<unsigned char>(img);
+	orig = CImg<unsigned char>(source);
 
 	init(source.width(), source.height(), CImg<unsigned char>(argv[2]));
 	inpaint();
 
-	source.display();
+	// source.display();
+	CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
+	img_display.move(0, 200);
+	orig_display.move(source.width(), 200);
+	while (!img_display.is_closed() && !orig_display.is_closed()) {
+		img_display.wait();
+	}
+	source.save(argv[3]);
 
 	return 0;
 }

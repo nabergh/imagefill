@@ -5,6 +5,7 @@ CImg<unsigned char> source;
 CImg<unsigned char> matte;
 
 int main(int argc, char *argv[]) {
+	int brushwidth = 4;
 	if (argc == 3) {
 		source = CImg<unsigned char>(argv[1]);
 		matte = CImg<unsigned char>(source.width(), source.height(), 1, 1, 0);
@@ -15,8 +16,8 @@ int main(int argc, char *argv[]) {
 			int c;
 			img_display.wait();
 			if (img_display.button()) {
-				for (int i = img_display.mouse_x() - 2; i < img_display.mouse_x() + 2; ++i) {
-					for (int j = img_display.mouse_y() - 2; j < img_display.mouse_y() + 2; ++j) {
+				for (int i = img_display.mouse_x() - brushwidth; i < img_display.mouse_x() + brushwidth; ++i) {
+					for (int j = img_display.mouse_y() - brushwidth; j < img_display.mouse_y() + brushwidth; ++j) {
 						cimg_forC(source, c) {
 							source(i, j, c) = 255;
 						}
