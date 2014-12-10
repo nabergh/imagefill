@@ -8,7 +8,6 @@ using namespace cimg_library;
 
 
 CImg<unsigned char> source;
-CImg<unsigned char> lab;
 CImg<unsigned char> orig;
 CImg<unsigned char> matte;
 CImg<float> confidence_values;
@@ -38,7 +37,7 @@ public:
 		x = 0;
 		y = 0;
 	};
-	Vector2d(float &x_coord, float &y_coord) {
+	Vector2d(float x_coord, float y_coord) {
 		x = x_coord;
 		y = y_coord;
 	};
@@ -78,7 +77,6 @@ float confidence(pixel_info &p) {
 }
 
 void init(int width, int height, CImg<unsigned char> matte) {
-	lab = source.get_RGBtoLab();
 	confidence_values = CImg<float>(source.width(), source.height(), 1, 1, 1);
 	omega = CImg<bool>(source.width(), source.height(), 1, 1, 0);
 	front = CImg<bool>(source.width(), source.height(), 1, 1, 0);
@@ -128,8 +126,8 @@ float SSD(pixel_info p, int qx, int qy) {
 		for (j = std::max(p.y_loc - rad, 0); j <= std::min(p.y_loc + rad, source.height() - 1); j++) {
 			if (!omega(qx + i - p.x_loc, qy + j - p.y_loc)) {
 				if (!omega(i, j)) {
-					cimg_forC(lab, c) {
-						sum = sum + pow(lab(i, j, 0, c) - lab(qx + i - p.x_loc, qy + j - p.y_loc, 0, c), 2);
+					cimg_forC(source, c) {
+						sum = sum + pow(source(i, j, 0, c) - source(qx + i - p.x_loc, qy + j - p.y_loc, 0, c), 2);
 					}
 				}
 			} else {
@@ -198,6 +196,7 @@ pixel_info directionalSearch(Vector2d dir, int x_loc, int y_loc) {
 		nearest.x_loc = (int) x;
 		nearest.y_loc = (int) y;
 	}
+	return directionalSearch(Vector2d(dir.y, -1 * dir.x), x_loc, y_loc);
 }
 
 float luminance(int x, int y) {
@@ -328,7 +327,7 @@ float data(pixel_info &p) {
 
 void inpaint() {
 	int counter = 0;
-	source.display();
+	// source.display();
 	while (!fillfront.empty()) {
 		//compute priorities
 		for (int i = 0; i < fillfront.size(); i++) {
@@ -367,9 +366,6 @@ void inpaint() {
 					cimg_forC(source, c) {
 						source(i, j, 0, c) = source(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, c);
 					}
-					cimg_forC(lab, c) {
-						lab(i, j, 0, c) = lab(min_patch.x_loc + i - next.x_loc, min_patch.y_loc + j - next.y_loc, 0, c);
-					}
 					omega(i, j) = 0;
 					front(i, j) = 0;
 					confidence_values(i, j) = next.conf;
@@ -377,10 +373,10 @@ void inpaint() {
 			}
 		}
 
-		if (counter++ == 10) {
-			counter = 0;
-			source.display();
-		}
+		// if (counter++ == 10) {
+		// 	counter = 0;
+		// 	source.display();
+		// }
 
 		//add to fillfront
 		for (int i = std::max(next.x_loc - (rad + 1), 0); i <= std::min(next.x_loc + (rad + 1), source.width() - 1); i++) {
