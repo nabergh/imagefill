@@ -116,6 +116,9 @@ void init(int x, int y, int width, int height) {
 			if ((i < x || i > x+width) || (j < y || j > y+height)) {
 				confidence_values(i, j) = 0;
 				omega(i, j) = 1;
+				cimg_forC(source, c) {
+					source(i, j, c) = 0;
+				}
 				if ( i == x-1 || i == x+width+1 || j == y-1 || j == y+height+1 ) {
 					pixel_info d_sigma;
 					d_sigma.x_loc = i;
@@ -127,7 +130,9 @@ void init(int x, int y, int width, int height) {
 					front(i, j) = 1;
 				}
 			} else {
-				source(i, j) = orig(i-x, j-y);
+				cimg_forC(source, c) {
+					source(i, j, c) = orig(x-1, y-j, c);
+				}
 			}
 		}
 	}
@@ -458,18 +463,17 @@ int main(int argc, char *argv[]) {
 		CImg<unsigned char> img = CImg<unsigned char>(argv[1]);
 		int c;
 		if (img.spectrum() == 1) {
-			source = CImg<unsigned char>(img.width(), img.height(), 1, 3);
-			for (int i = 0; i < source.width(); ++i) {
-				for (int j = 0; j < source.height(); ++j) {
-					cimg_forC(source, c) {
-						source(i, j, c) = img(i, j);
+			orig = CImg<unsigned char>(img.width(), img.height(), 1, 3);
+			for (int i = 0; i < orig.width(); ++i) {
+				for (int j = 0; j < orig.height(); ++j) {
+					cimg_forC(orig, c) {
+						orig(i, j, c) = img(i, j);
 					}
 				}
 			}
 		} else
-			source = CImg<unsigned char>(img);
-		orig = CImg<unsigned char>(source);
-		source = CImg<unsigned char>(atoi(argv[4]), atoi(argv[3]), 1, 3, 0);
+			orig = CImg<unsigned char>(img);
+		source = CImg<unsigned char>(atoi(argv[4]), atoi(argv[3]), 1, 3);
 		int x = atoi(argv[5]);
 		int y = atoi(argv[6]);
 
@@ -478,7 +482,7 @@ int main(int argc, char *argv[]) {
 
 		CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
 		img_display.move(200, 200);
-		orig_display.move(source.width()+200, 200+source.height()/2);
+		orig_display.move(source.width()+200, 200+y);
 		while (!img_display.is_closed() && !orig_display.is_closed()) {
 			img_display.wait();
 		}
