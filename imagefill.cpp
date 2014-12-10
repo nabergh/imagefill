@@ -327,6 +327,8 @@ float data(pixel_info &p) {
 }
 
 void inpaint() {
+	int counter = 0;
+	source.display();
 	while (!fillfront.empty()) {
 		//compute priorities
 		for (int i = 0; i < fillfront.size(); i++) {
@@ -375,7 +377,10 @@ void inpaint() {
 			}
 		}
 
-		// source.display();
+		if (counter++ == 10) {
+			counter = 0;
+			source.display();
+		}
 
 		//add to fillfront
 		for (int i = std::max(next.x_loc - (rad + 1), 0); i <= std::min(next.x_loc + (rad + 1), source.width() - 1); i++) {
