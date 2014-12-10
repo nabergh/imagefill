@@ -131,7 +131,7 @@ void init(int x, int y, int width, int height) {
 				}
 			} else {
 				cimg_forC(source, c) {
-					source(i, j, c) = orig(x-1, y-j, c);
+					source(i, j, c) = orig(i-x, j-y, c);
 				}
 			}
 		}
@@ -472,12 +472,12 @@ int main(int argc, char *argv[]) {
 			}
 		} else
 			orig = CImg<unsigned char>(img);
-		source = CImg<unsigned char>(atoi(argv[4]), atoi(argv[3]), 1, 3);
+		source = CImg<unsigned char>(atoi(argv[3]), atoi(argv[4]), 1, 3);
 		int x = atoi(argv[5]);
 		int y = atoi(argv[6]);
 
 		init(x, y, orig.width(), orig.height());
-		inpaint(argv[3]);
+		inpaint(argv[2]);
 
 		CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
 		img_display.move(200, 200);
@@ -488,7 +488,7 @@ int main(int argc, char *argv[]) {
 		source.save(argv[2]);
 	} else {
 		printf("You must input parameters like so: /imagefill [in file] [matte] [out file] [patch radius]\n");
-		printf("Or like so: /imagefill [in file] [out file] [height] [width] [x] [y] [patch radius]\n");
+		printf("Or like so: /imagefill [in file] [out file] [width] [height] [x] [y] [patch radius]\n");
 	}
 
 	return 0;
