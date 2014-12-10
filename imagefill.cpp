@@ -77,18 +77,18 @@ float confidence(pixel_info &p) {
 	return p.conf;
 }
 
-void init(int width, int height, CImg<unsigned char> matte) {
+void init(CImg<unsigned char> matte) {
 	lab = source.get_RGBtoLab();
 	confidence_values = CImg<float>(source.width(), source.height(), 1, 1, 1);
 	omega = CImg<bool>(source.width(), source.height(), 1, 1, 0);
 	front = CImg<bool>(source.width(), source.height(), 1, 1, 0);
 	int i, j;
-	for (i = 0; i < width; i++) {
-		for (j = 0; j < height; j++) {
+	for (i = 0; i < source.width(); i++) {
+		for (j = 0; j < source.height(); j++) {
 			if (matte(i, j) == 255) {
 				confidence_values(i, j) = 0;
 				omega(i, j) = 1;
-				if ( (i > 0 && matte(i - 1, j) != 255) || (i < width - 1 && matte(i + 1, j) != 255) || (j > 0 && matte(i, j - 1) != 255) || (j < height - 1 && matte(i, j + 1) != 255) ) {
+				if ( (i > 0 && matte(i - 1, j) != 255) || (i < source.width() - 1 && matte(i + 1, j) != 255) || (j > 0 && matte(i, j - 1) != 255) || (j < source.height() - 1 && matte(i, j + 1) != 255) ) {
 					pixel_info d_sigma;
 					d_sigma.x_loc = i;
 					d_sigma.y_loc = j;
@@ -102,6 +102,35 @@ void init(int width, int height, CImg<unsigned char> matte) {
 				cimg_forC(source, c) {
 					source(i, j, c) = 0;
 				}
+			}
+		}
+	}
+
+}
+
+void init(int x, int y, int width, int height) {
+	lab = source.get_RGBtoLab();
+	confidence_values = CImg<float>(source.width(), source.height(), 1, 1, 1);
+	omega = CImg<bool>(source.width(), source.height(), 1, 1, 0);
+	front = CImg<bool>(source.width(), source.height(), 1, 1, 0);
+	int i, j;
+	for (i = 0; i < source.width(); i++) {
+		for (j = 0; j < source.height(); j++) {
+			if ((i < x || i > x+width) || (j < y || j > y+height)) {
+				confidence_values(i, j) = 0;
+				omega(i, j) = 1;
+				if ( i == x-1 || i == x+width+1 || j == y-1 || j == y+height+1 ) {
+					pixel_info d_sigma;
+					d_sigma.x_loc = i;
+					d_sigma.y_loc = j;
+					d_sigma.conf = 0;
+					d_sigma.data = 0;
+					d_sigma.priority = d_sigma.conf * d_sigma.data;
+					fillfront.push_back(d_sigma);
+					front(i, j) = 1;
+				}
+			} else {
+				source(i, j) = orig(i-x, j-y);
 			}
 		}
 	}
@@ -396,37 +425,68 @@ void inpaint() {
 }
 
 int main(int argc, char *argv[]) {
-	if (argc != 5) {
-		printf("You must input parameters like so: /imagequilt [in file] [matte] [out file] [patch radius]\n");
-		return 0;
-	}
-	rad = atoi(argv[4]);
-	CImg<unsigned char> img = CImg<unsigned char>(argv[1]);
-	int c;
-	if (img.spectrum() == 1) {
-		source = CImg<unsigned char>(img.width(), img.height(), 1, 3);
-		for (int i = 0; i < source.width(); ++i) {
-			for (int j = 0; j < source.height(); ++j) {
-				cimg_forC(source, c) {
-					source(i, j, c) = img(i, j);
+	if (argc == 5) {
+		rad = atoi(argv[4]);
+		CImg<unsigned char> img = CImg<unsigned char>(argv[1]);
+		int c;
+		if (img.spectrum() == 1) {
+			source = CImg<unsigned char>(img.width(), img.height(), 1, 3);
+			for (int i = 0; i < source.width(); ++i) {
+				for (int j = 0; j < source.height(); ++j) {
+					cimg_forC(source, c) {
+						source(i, j, c) = img(i, j);
+					}
 				}
 			}
+		} else
+			source = CImg<unsigned char>(img);
+		orig = CImg<unsigned char>(source);
+
+		init(CImg<unsigned char>(argv[2]));
+		inpaint();
+
+		// source.display();
+		CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
+		img_display.move(200, 200);
+		orig_display.move(source.width()+200, 200);
+		while (!img_display.is_closed() && !orig_display.is_closed()) {
+			img_display.wait();
 		}
-	} else
-		source = CImg<unsigned char>(img);
-	orig = CImg<unsigned char>(source);
+		source.save(argv[3]);
+	} else if (argc == 8) {
+		rad = atoi(argv[7]);
+		CImg<unsigned char> img = CImg<unsigned char>(argv[1]);
+		int c;
+		if (img.spectrum() == 1) {
+			source = CImg<unsigned char>(img.width(), img.height(), 1, 3);
+			for (int i = 0; i < source.width(); ++i) {
+				for (int j = 0; j < source.height(); ++j) {
+					cimg_forC(source, c) {
+						source(i, j, c) = img(i, j);
+					}
+				}
+			}
+		} else
+			source = CImg<unsigned char>(img);
+		orig = CImg<unsigned char>(source);
+		source = CImg<unsigned char>(atoi(argv[4]), atoi(argv[3]), 1, 3, 0);
+		int x = atoi(argv[5]);
+		int y = atoi(argv[6]);
 
-	init(source.width(), source.height(), CImg<unsigned char>(argv[2]));
-	inpaint();
+		init(x, y, orig.width(), orig.height());
+		inpaint();
 
-	// source.display();
-	CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
-	img_display.move(0, 200);
-	orig_display.move(source.width(), 200);
-	while (!img_display.is_closed() && !orig_display.is_closed()) {
-		img_display.wait();
+		CImgDisplay img_display(source, "new image"), orig_display(orig, "original image");
+		img_display.move(200, 200);
+		orig_display.move(source.width()+200, 200+source.height()/2);
+		while (!img_display.is_closed() && !orig_display.is_closed()) {
+			img_display.wait();
+		}
+		source.save(argv[2]);
+	} else {
+		printf("You must input parameters like so: /imagefill [in file] [matte] [out file] [patch radius]\n");
+		printf("Or like so: /imagefill [in file] [out file] [height] [width] [x] [y] [patch radius]\n");
 	}
-	source.save(argv[3]);
 
 	return 0;
 }
